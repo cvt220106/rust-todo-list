@@ -1,0 +1,2 @@
+[default.databases]
+Todo = { url = "postgres://jacky:postgres@localhost:5432/todo" }

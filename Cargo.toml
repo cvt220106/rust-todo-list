@@ -6,5 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rocket = { version = "0.5.0", features = ["json"] }
-serde = { version = "1.0.202", features = ["derive"] }
+rocket = { version = "0.5.0-rc.2", features = ["json"] }
+sqlx = { version = "0.7.4", default-features = false, features = ["macros", "migrate", "postgres"] }
+
+[dependencies.rocket_db_pools]
+version = "0.1.0"
+features = ["sqlx_postgres"]
