@@ -1,0 +1,10 @@
+.container {
+    max-width: 1200px;
+    margin: auto;
+    padding-top: 2rem;
+}
+
+.success-flash {
+    margin: -10px 0 10px 0;
+    color: green;
+}
