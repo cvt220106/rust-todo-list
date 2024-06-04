@@ -1,7 +1,16 @@
+* {
+    box-sizing: border-box;
+}
+
 .container {
     max-width: 1200px;
     margin: auto;
     padding-top: 2rem;
+}
+
+.error-flash {
+    margin: -10px 0 10px 0;
+    color: red;
 }
 
 .success-flash {

@@ -1,149 +1,14 @@
 #[macro_use]
 extern crate rocket;
+extern crate argon2;
 
-mod pool;
 
 use migration::MigratorTrait;
-use pool::Db;
-use rocket::fs::{relative, FileServer};
-use rocket::http::Status;
-use rocket::request::FlashMessage;
-use rocket::response::{Flash, Redirect};
-use rocket::serde::json::Json;
-use rocket::{
-    fairing,
-    fairing::{AdHoc, Fairing},
-    form::Form,
-    response::{self, Responder},
-    Build, Request, Rocket,
-};
+use todo_app::pool::Db;
+use todo_app::{render_routes, task_routes, user_routes};
+use rocket::{fairing::{AdHoc, self}, Rocket, Build, fs::{FileServer, relative}};
 use rocket_dyn_templates::Template;
-use sea_orm::{ActiveModelTrait, DeleteResult, EntityTrait, PaginatorTrait, QueryOrder, Set};
-use sea_orm_rocket::{Connection, Database};
-
-use entity::tasks;
-use entity::tasks::Entity as Tasks;
-use migration::tests_cfg::json;
-
-struct DatabaseError(sea_orm::DbErr);
-
-impl<'r> Responder<'r, 'r> for DatabaseError {
-    fn respond_to(self, request: &'r Request<'_>) -> rocket::response::Result<'r> {
-        Err(Status::InternalServerError)
-    }
-}
-
-impl From<sea_orm::DbErr> for DatabaseError {
-    fn from(value: sea_orm::DbErr) -> Self {
-        DatabaseError(value)
-    }
-}
-
-#[post("/addtask", data = "<task_form>")]
-async fn add_task(conn: Connection<'_, Db>, task_form: Form<tasks::Model>) -> Flash<Redirect> {
-    let db = conn.into_inner();
-    let task = task_form.into_inner();
-
-    let active_task: tasks::ActiveModel = tasks::ActiveModel {
-        item: Set(task.item),
-        ..Default::default()
-    };
-
-    match active_task.insert(db).await {
-        Ok(result) => result,
-        Err(_) => {
-            return Flash::error(Redirect::to("/"), "Issue creating the task!");
-        }
-    };
-
-    Flash::success(Redirect::to("/"), "Task created!")
-}
-
-#[get("/readtasks")]
-async fn read_tasks(conn: Connection<'_, Db>) -> Result<Json<Vec<tasks::Model>>, DatabaseError> {
-    let db = conn.into_inner();
-
-    Ok(Json(
-        Tasks::find()
-            .order_by_asc(tasks::Column::Id)
-            .all(db)
-            .await?,
-    ))
-}
-
-#[put("/edittask", data = "<task_form>")]
-async fn edit_task(conn: Connection<'_, Db>, task_form: Form<tasks::Model>) -> Flash<Redirect> {
-    let db = conn.into_inner();
-    let task = task_form.into_inner();
-
-    let task_to_update = match Tasks::find_by_id(task.id).one(db).await {
-        Ok(result) => result,
-        Err(_) => {
-            return Flash::error(Redirect::to("/"), "Issue editing the task!");
-        }
-    };
-    let mut task_to_update: tasks::ActiveModel = task_to_update.unwrap().into();
-    task_to_update.item = Set(task.item);
-
-    match task_to_update.update(db).await {
-        Ok(result) => result,
-        Err(_) => {
-            return Flash::error(Redirect::to("/"), "Issue editing the task!");
-        }
-    };
-
-    Flash::success(Redirect::to("/"), "Task edited successfully!")
-}
-
-#[get("/edit/<id>")]
-async fn edit_task_page(conn: Connection<'_, Db>, id: i32) -> Result<Template, DatabaseError> {
-    let db = conn.into_inner();
-
-    let task = Tasks::find_by_id(id).one(db).await?.unwrap();
-
-    Ok(Template::render("edit_task_form", json!({ "task": task })))
-}
-
-#[delete("/deletetask/<id>")]
-async fn delete_task(conn: Connection<'_, Db>, id: i32) -> Flash<Redirect> {
-    let db = conn.into_inner();
-    let _result = match Tasks::delete_by_id(id).exec(db).await {
-        Ok(value) => value,
-        Err(_) => {
-            return Flash::error(Redirect::to("/"), format!("Task with id {} not found!", id))
-        }
-    };
-
-    Flash::success(Redirect::to("/"), format!("Task deleted! {:?}", _result))
-}
-
-#[get("/?<page>&<tasks_per_page>")]
-async fn index(
-    conn: Connection<'_, Db>,
-    flash: Option<FlashMessage<'_>>,
-    page: Option<usize>,
-    tasks_per_page: Option<usize>,
-) -> Result<Template, DatabaseError> {
-    let db = conn.into_inner();
-    let page = page.unwrap_or(0);
-    let tasks_per_page = tasks_per_page.unwrap_or(5);
-
-    let pageinator = Tasks::find()
-        .order_by_asc(tasks::Column::Id)
-        .paginate(db, tasks_per_page);
-    let number_pf_pages = pageinator.num_pages().await?;
-    let tasks = pageinator.fetch_page(page).await?;
-
-    Ok(Template::render(
-        "todo_list",
-        json!({
-            "tasks": tasks,
-            "flash": flash.map(FlashMessage::into_inner),
-            "number_of_pages": number_pf_pages,
-            "current_page": page
-        })
-    ))
-}
+use sea_orm_rocket::Database;
 
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
     let conn = &Db::fetch(&rocket).unwrap().conn;
@@ -161,12 +26,21 @@ fn rocket() -> _ {
         .mount(
             "/",
             routes![
-                index,
-                add_task,
-                read_tasks,
-                edit_task,
-                delete_task,
-                edit_task_page
+                render_routes::index,
+                render_routes::index_redirect,
+                render_routes::edit_task_page,
+                render_routes::edit_task_page_redirect,
+                render_routes::signup_page,
+                render_routes::login_page,
+                task_routes::add_task,
+                task_routes::add_task_redirect,
+                task_routes::edit_task,
+                task_routes::edit_task_redirect,
+                task_routes::delete_task,
+                task_routes::delete_task_redirect,
+                user_routes::create_account,
+                user_routes::verify_account,
+                user_routes::logout,
             ],
         )
         .attach(Template::fairing())
